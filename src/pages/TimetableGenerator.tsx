@@ -379,9 +379,9 @@ const TimetableGenerator: React.FC = () => {
         const sectionRoom = roomAssignment[section.name];
         
         fixedTheorySubjectsList[semesterString].forEach(subjectName => {
-          let remaining = 4;
+          const remaining = 4;
           const daysOrder = getRandomOrder([...Array(DAYS_TO_USE.length).keys()]);
-          let usedDays: number[] = [];
+          const usedDays: number[] = [];
           let placedCount = 0;
           
           // Find if a user-input subject with this name exists for faculty assignment
@@ -455,7 +455,7 @@ const TimetableGenerator: React.FC = () => {
           console.log(`Allocating ${subject.name} (${remaining} hours) for section ${section.name}`);
           
           const daysOrder = getRandomOrder([...Array(DAYS_TO_USE.length).keys()]);
-          let usedDays: number[] = [];
+          const usedDays: number[] = [];
           let placedCount = 0;
           
           for (let i = 0; i < remaining; i++) {
@@ -552,7 +552,8 @@ const TimetableGenerator: React.FC = () => {
     if (conflictLog.length > 0) {
       console.log('Conflicts found:', conflictLog);
     }
-    
+    // Debug: Print the generated timetable grid for all sections
+    console.log('Generated timetable for all sections:', timetable);
     // Update state
     setConflicts({});
     setTimetables(timetable);
@@ -688,7 +689,22 @@ const TimetableGenerator: React.FC = () => {
                     const tableBody = DAYS_TO_USE.map((day, dayIndex) => {
                       const row = [day];
                       TIME_SLOTS.forEach((timeSlot, timeIndex) => {
-                        let cellValue = timetable[dayIndex]?.[timeIndex] || '-';
+                        const cellValue = timetable[dayIndex]?.[timeIndex] || '-';
+                        const cellStr = typeof cellValue === 'string' ? cellValue.toLowerCase() : '';
+                        const isLab = cellStr.includes('(fixed lab)') || cellStr.includes('(lab block)');
+                        const isFixedTheory = cellStr.includes('(fixed theory)') || cellStr.includes('(floating fixed)');
+                        const isUnassigned = cellStr.includes('(unassigned)') || cellStr.includes('(no faculty)');
+                        const isLunch = cellStr === 'lunch break';
+                        let cellClass = 'px-4 py-2 text-sm border border-gray-300';
+                        if (isLab) {
+                          cellClass += ' bg-yellow-100';
+                        } else if (isFixedTheory) {
+                          cellClass += ' bg-blue-50';
+                        } else if (isUnassigned) {
+                          cellClass += ' bg-yellow-50 text-yellow-800';
+                        } else if (isLunch) {
+                          cellClass += ' bg-blue-50 text-gray-600';
+                        }
                         row.push(cellValue);
                       });
                       return row;
@@ -706,109 +722,50 @@ const TimetableGenerator: React.FC = () => {
                         0: { cellWidth: 60 },
                         // Let autoTable size the rest
                       },
-                      didDrawCell: function (data: any) {
-                        // Optional: color code cells in PDF (yellow for labs, blue for fixed theory, etc.)
-                        const value = data.cell.raw;
-                        if (typeof value === 'string') {
-                          if (value.includes('(Fixed Lab)') || value.includes('(Lab Block)')) {
-                            doc.setFillColor(255, 249, 196); // light yellow
-                            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                          } else if (value.includes('(Fixed Theory)') || value.includes('(Floating Fixed)')) {
-                            doc.setFillColor(219, 234, 254); // light blue
-                            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                          } else if (value.includes('(Unassigned)') || value.includes('(No Faculty)')) {
-                            doc.setFillColor(254, 243, 199); // light orange
-                            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                          } else if (value === 'Lunch Break') {
-                            doc.setFillColor(229, 231, 235); // gray
-                            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                          }
-                        }
-                      },
                     });
                   });
-                  doc.save(`timetables_${semesterMap[semester]}_semester.pdf`);
+                  doc.save(`${semester}SemesterTimetable.pdf`);
                 }}
-                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition duration-200"
+                className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition duration-200"
               >
-                Export PDF
+                Save & View PDF
               </button>
             </div>
-
-            {/* Timetable Display */}
-            <div className="space-y-6">
-              {Object.entries(timetables).map(([sectionName, timetable]) => (
-                <div key={sectionName} className="border rounded-lg overflow-hidden mb-8">
-                  <div className="bg-white px-4 py-3 border-b">
-                    <h3 className="text-2xl font-semibold text-blue-700">Section {sectionName}</h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-300">
-                      <thead>
-                        <tr className="bg-blue-700">
-                          <th className="px-4 py-2 text-left font-bold text-white border border-gray-300">Day</th>
-                          {TIME_SLOTS.map(timeSlot => (
-                            <th key={timeSlot} className="px-4 py-2 text-left font-bold text-white border border-gray-300">{timeSlot}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {DAYS_TO_USE.map((day, dayIndex) => (
-                          <tr key={day} className={dayIndex % 2 === 0 ? 'bg-blue-50' : 'bg-white'}>
-                            <td className="px-4 py-2 font-bold text-blue-700 border border-gray-300">{day}</td>
-                            {TIME_SLOTS.map((timeSlot, timeIndex) => {
-                              const cellValue = timetable[dayIndex]?.[timeIndex] || '-';
-                              const isLab = cellValue.includes('(Fixed Lab)') || cellValue.includes('(Lab Block)');
-                              const isFixedTheory = cellValue.includes('(Fixed Theory)') || cellValue.includes('(Floating Fixed)');
-                              const isUnassigned = cellValue.includes('(Unassigned)') || cellValue.includes('(No Faculty)');
-                              const isLunch = cellValue === 'Lunch Break';
-                              let cellClass = 'px-4 py-2 text-sm border border-gray-300';
-                              if (isLab) {
-                                cellClass += ' bg-yellow-100';
-                              } else if (isFixedTheory) {
-                                cellClass += ' bg-blue-50';
-                              } else if (isUnassigned) {
-                                cellClass += ' bg-yellow-50 text-yellow-800';
-                              } else if (isLunch) {
-                                cellClass += ' bg-blue-50 text-gray-600';
-                              }
-                              return (
-                                <td key={timeSlot} className={cellClass}>
-                                  {isLunch ? <span className="italic">Lunch Break</span> : cellValue}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+            {/* Render generated timetable(s) as a table/grid */}
+            {Object.entries(timetables).map(([sectionName, timetable]) => (
+              <div key={sectionName} className="border rounded-lg overflow-hidden mb-8">
+                <div className="bg-white px-4 py-3 border-b">
+                  <h3 className="text-2xl font-semibold text-blue-700">Section {sectionName}</h3>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* No Timetables Message */}
-        {Object.keys(timetables).length === 0 && (
-          <div className="bg-white rounded-lg shadow-sm p-6 text-center">
-            <div className="text-gray-400 mb-4">
-              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Timetables Generated</h3>
-            <p className="text-gray-600 mb-4">
-              Select a semester and click "Generate Timetable" to create timetables for all sections.
-            </p>
-            <div className="text-sm text-gray-500">
-              <p>Make sure you have:</p>
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Added sections for the selected semester</li>
-                <li>Added rooms for the timetable</li>
-                <li>Added subjects and faculty assignments (optional)</li>
-              </ul>
-            </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-blue-700">
+                        <th className="px-4 py-2 text-left font-bold text-white border border-gray-300">Day</th>
+                        {TIME_SLOTS.map(timeSlot => (
+                          <th key={timeSlot} className="px-4 py-2 text-left font-bold text-white border border-gray-300">{timeSlot}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DAYS_TO_USE.map((day, dayIndex) => (
+                        <tr key={day}>
+                          <td className="px-4 py-2 font-bold text-blue-700 border border-gray-300">{day}</td>
+                          {TIME_SLOTS.map((timeSlot, timeIndex) => {
+                            const cellValue = timetable[dayIndex]?.[timeIndex] || '-';
+                            return (
+                              <td key={timeSlot} className="px-4 py-2 text-sm border border-gray-300 bg-white">
+                                {cellValue}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

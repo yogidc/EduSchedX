@@ -1,15 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Download, Printer, Edit, ChevronLeft, ChevronRight, AlertTriangle, Trash2, Eye, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TimetableGrid from '../components/timetable/TimetableGrid';
 import TimetableLegend from '../components/timetable/TimetableLegend';
-import { exportToPDF, exportToCSV } from '../utils/exportUtils';
+import { exportToCSV, exportTimetableToPDFWithAutoTable } from '../utils/exportUtils';
 import { Timetable, TimetableCell, TimetableDay } from '../types/timetable';
 
 const TimetableView: React.FC = () => {
   const { timetables, rooms, sections, setTimetables } = useApp();
   const { semesterId, sectionId } = useParams<{ semesterId: string; sectionId: string }>();
+  
+  // Load timetables from localStorage if context is empty
+  useEffect(() => {
+    if (Object.keys(timetables).length === 0) {
+      const saved = localStorage.getItem('savedTimetables');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setTimetables(parsed);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  }, [timetables, setTimetables]);
   
   // Gather all available timetables
   const allTimetables: { semester: string; section: string }[] = [];
@@ -35,90 +50,98 @@ const TimetableView: React.FC = () => {
   // Build a Timetable object for the selected timetable
   let timetableObj: Timetable | null = null;
   if (selected && timetables[selected.semester] && timetables[selected.semester][selected.section]) {
-    const grid = timetables[selected.semester][selected.section];
-    console.log('Building timetable object for:', selected, 'Grid:', grid);
-    
-    // Try to get days and timeSlots from grid if possible, else fallback
-    const days = Array.isArray(grid)
-      ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-      : Object.keys(grid);
-    const timeSlots = Array.isArray(grid) && grid[0] ? grid[0].map((_: any, i: number) => ({ id: `slot-${i + 1}`, startTime: '', endTime: '' })) : [];
-    
-    // Fix rooms to match Timetable type
-    const fixedRooms = rooms.map(r => ({
-      ...r,
-      type: (r.type === 'class' ? 'classroom' : r.type) as 'lab' | 'classroom' | 'auditorium',
-      capacity: (r as any).capacity ?? 40,
-      isAvailable: (r as any).isAvailable ?? true,
-    }));
-    
-    // Parse semester correctly - handle both string and numeric formats
-    let semesterNumber: number;
-    try {
-      semesterNumber = parseInt(selected.semester, 10);
-      if (isNaN(semesterNumber)) {
-        // If parsing fails, try to extract number from string like "1st" -> 1
-        semesterNumber = parseInt(selected.semester.replace(/\D/g, ''), 10) || 1;
-      }
-    } catch (e) {
-      semesterNumber = 1; // fallback
-    }
-    
-    timetableObj = {
-      id: `timetable-${selected.semester}-${selected.section}`,
-      semester: semesterNumber,
-      section: selected.section,
-      days: {},
-      timeSlots: [],
-      rooms: fixedRooms,
-      conflicts: Array.isArray(grid.conflicts) ? grid.conflicts : [],
-    };
-    
-    // If grid is a 2D array, convert to days/timeslots
-    if (Array.isArray(grid)) {
-      console.log('Converting 2D array grid to timetable object');
-      const daysObject: any = {};
-      days.forEach((day, i) => {
-        daysObject[day] = {};
-        if (Array.isArray(grid[i])) {
-          grid[i].forEach((cell: any, j: number) => {
-            daysObject[day][`slot-${j + 1}`] = { 
-              subjectId: cell || '',
-              facultyId: '',
-              roomId: '',
-              type: 'Lecture' as const
-            };
-          });
+    // Map the days object to correct TimetableCell types and always set subjectId to the visible label
+    const rawDays = timetables[selected.semester][selected.section];
+    const days: { [day: string]: { [slot: string]: TimetableCell } } = {};
+    Object.entries(rawDays).forEach(([day, slots]) => {
+      days[day] = {};
+      Object.entries(slots).forEach(([slot, cell]) => {
+        let mappedType: TimetableCell['type'] = undefined;
+        let subjectId: string = '';
+        if (typeof cell === 'string' && cell) {
+          const cellStr = String(cell);
+          const lower = cellStr.toLowerCase();
+          if (lower.includes('(fixed lab)')) {
+            mappedType = 'Lab';
+            subjectId = cellStr.split('(Fixed Lab)')[0].trim();
+          } else if (lower.includes('(fixed theory)')) {
+            mappedType = 'Lecture';
+            subjectId = cellStr.split('(Fixed Theory)')[0].trim();
+          } else {
+            subjectId = cellStr;
+            if (lower.includes('lab')) mappedType = 'Lab';
+            else if (lower.includes('theory')) mappedType = 'Lecture';
+            else if (lower.includes('placement')) mappedType = 'Placement';
+            else if (lower.includes('break')) mappedType = 'Break';
+            else if (lower.includes('elective')) mappedType = 'Elective';
+          }
+        } else if (cell && typeof cell === 'object') {
+          subjectId = (cell as any).subjectId || (cell as any).subject || '';
+          let typeString = '';
+          if (cell.type) typeString = String(cell.type).toLowerCase();
+          if (typeString === 'theory') mappedType = 'Lecture';
+          else if (typeString === 'lab') mappedType = 'Lab';
+          else if (typeString === 'placement') mappedType = 'Placement';
+          else if (typeString === 'break') mappedType = 'Break';
+          else if (typeString === 'elective') mappedType = 'Elective';
+          else if ([
+            'lecture', 'lab', 'elective', 'placement', 'break'
+          ].includes(typeString)) {
+            // Only assign if typeString matches allowed types
+            const allowedTypes = ['Lecture', 'Lab', 'Elective', 'Placement', 'Break'];
+            const capitalized = typeString.charAt(0).toUpperCase() + typeString.slice(1);
+            if (allowedTypes.includes(capitalized)) {
+              mappedType = capitalized as TimetableCell['type'];
+            } else {
+              mappedType = undefined;
+            }
+          } else {
+            mappedType = undefined;
+          }
         }
+        days[day][slot] = { ...cell, subjectId, type: mappedType };
       });
-      timetableObj.days = daysObject;
-      timetableObj.timeSlots = grid[0]
-        ? grid[0].map((_: any, i: number) => ({ id: `slot-${i + 1}`, startTime: '', endTime: '' }))
-        : [];
-    } else if (
-      grid.days &&
-      typeof grid.days === 'object' &&
-      !Array.isArray(grid.days) &&
-      Object.keys(grid.days).every(key => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].includes(key)) &&
-      Object.values(grid.days).every(val => typeof val === 'object' && !Array.isArray(val)) &&
-      grid.timeSlots && Array.isArray(grid.timeSlots)
-    ) {
-      console.log('Using existing timetable object structure');
-      timetableObj.days = grid.days;
-      timetableObj.timeSlots = grid.timeSlots;
-    } else {
-      console.log('Creating empty timetable structure');
-      timetableObj.days = {};
-      timetableObj.timeSlots = [];
-    }
-    
-    console.log('Final timetable object:', timetableObj);
-  } else {
-    console.log('No timetable found for:', selected, 'Available timetables:', timetables);
+    });
+    timetableObj = {
+      id: `${selected.semester}-${selected.section}`,
+      semester: parseInt(selected.semester, 10),
+      section: selected.section,
+      days,
+      timeSlots: [],
+      rooms: [],
+      conflicts: []
+    };
   }
   
   const handleExportPDF = () => {
-    if (timetableObj) exportToPDF(timetableObj, `Timetable_Sem${selected?.semester}_Section${selected?.section}`);
+    if (selected && timetables[selected.semester] && timetables[selected.semester][selected.section]) {
+      const rawGrid = timetables[selected.semester][selected.section];
+      // Map rawGrid to correct TimetableDay/TimetableCell types for export
+      const mappedDays: { [day: string]: { [slot: string]: any } } = {};
+      Object.entries(rawGrid).forEach(([day, slots]) => {
+        mappedDays[day] = {};
+        Object.entries(slots).forEach(([slot, cell]) => {
+          if (typeof cell === 'object' && cell !== null && cell.type) {
+            let mappedType = cell.type;
+            if (mappedType === 'theory') mappedType = 'Lecture' as any;
+            else if (mappedType === 'lab') mappedType = 'Lab' as any;
+            else if (mappedType === 'placement') mappedType = 'Placement' as any;
+            mappedDays[day][slot] = { ...cell, type: mappedType };
+          } else {
+            mappedDays[day][slot] = cell;
+          }
+        });
+      });
+      exportTimetableToPDFWithAutoTable({
+        id: `${selected.semester}-${selected.section}`,
+        semester: parseInt(selected.semester, 10),
+        section: selected.section,
+        days: mappedDays,
+        timeSlots: [],
+        rooms: [],
+        conflicts: []
+      }, `Timetable_Sem${selected?.semester}_Section${selected?.section}`);
+    }
   };
   
   const handleExportCSV = () => {
@@ -242,7 +265,7 @@ const TimetableView: React.FC = () => {
                             status.status === 'success' 
                               ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200'
                               : status.status === 'warning'
-                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'
+                              ? 'bg-white text-black'
                               : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-200'
                           }`}>
                             {status.text}
@@ -296,7 +319,7 @@ const TimetableView: React.FC = () => {
                                 rooms: [],
                                 conflicts: []
                               };
-                              exportToPDF(timetableForExport, `Timetable_Sem${semester}_Section${section}`);
+                              exportTimetableToPDFWithAutoTable(timetableForExport, `Timetable_Sem${semester}_Section${section}`);
                             }
                           }}
                           className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 transition"

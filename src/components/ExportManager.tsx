@@ -59,10 +59,10 @@ const ExportManager: React.FC = () => {
           table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
           th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-size: 12px; }
           th { background-color: #f1f5f9; font-weight: bold; }
-          .theory { background-color: #dbeafe; }
-          .lab { background-color: #d1fae5; }
-          .placement { background-color: #fed7aa; }
-          .lunch { background-color: #fef3c7; text-align: center; font-weight: bold; }
+          .theory { background-color: #fff; }
+          .lab { background-color: #fff; }
+          .placement { background-color: #fff; }
+          .lunch { background-color: #fff; text-align: center; font-weight: bold; }
           .free { color: #94a3b8; text-align: center; }
           @media print {
             .no-print { display: none; }

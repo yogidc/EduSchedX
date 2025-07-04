@@ -144,7 +144,7 @@ const TimetableGrid: React.FC<TimetableGridProps> = ({ data, view }) => {
                   return (
                     <td 
                       key={`${day}-${timeSlot.id}`} 
-                      className="py-3 px-4 border border-gray-200 dark:border-gray-600 text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 text-center italic"
+                      className="py-3 px-4 border border-gray-200 dark:border-gray-600 text-sm bg-white text-gray-400 dark:text-gray-500 text-center italic"
                     >
                       Free Day
                     </td>
@@ -154,16 +154,7 @@ const TimetableGrid: React.FC<TimetableGridProps> = ({ data, view }) => {
                 return (
                   <td 
                     key={`${day}-${timeSlot.id}`} 
-                    className={cn(
-                      "py-3 px-4 border border-gray-200 dark:border-gray-600 text-sm",
-                      {
-                        'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200': cellType === 'lecture',
-                        'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200': cellType === 'lab',
-                        'bg-purple-50 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200': cellType === 'elective',
-                        'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200': cellType === 'placement',
-                        'bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 italic': cellType === 'break',
-                      }
-                    )}
+                    className="py-3 px-4 border border-gray-200 dark:border-gray-600 text-sm bg-white"
                   >
                     <div>
                       {content}
